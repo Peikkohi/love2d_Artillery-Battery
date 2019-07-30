@@ -69,13 +69,20 @@ function love.draw()
 
   for x = cx % BOX_SIZE - BOX_SIZE, ww, BOX_SIZE do
     for y = cy % BOX_SIZE - BOX_SIZE, wh, BOX_SIZE do
-      local tile = map[x - cx ..','.. y - cy]
-      if tile then love.graphics.draw(tileset, tiles[tile], x, y, 0, SCALE) end
-    end
-  end
+      local pos = x - cx ..','.. y - cy
+      if map[pos] then
+        love.graphics.draw(tileset, tiles[map[pos]], x, y, 0, SCALE)
+      end
 
-  for i, line in ipairs(mode == 'border' and border or {}) do
-    love.graphics.line(line[1] + cx, line[2] + cy, line[3] + cx, line[4] + cy)
+      if mode == 'border' and border[pos] then
+        love.graphics.points(x, y)
+
+        for pos, _ in pairs(border[pos]) do
+          local _x, _y = pos:match('(%S+),(%S+)')
+          love.graphics.line(x, y, _x + cx, _y + cy)
+        end
+      end
+    end
   end
 
   if mode == 'tile' then
@@ -112,11 +119,26 @@ function love.keypressed(key, scancode, isrepeat)
       file:write(string.format('tile: %s pos: %d,%d\n', tile, x, y))
     end
 
-    for i, line in ipairs(border) do
-      file:write(string.format('border: %d,%d,%d,%d\n', unpack(line)))
+    local _br = {}
+    for pos, t in pairs(border) do
+      for _pos, _ in pairs(t) do
+        local x, y = pos:match('(%S+),(%S+)')
+        local _x, _y = _pos:match('(%S+),(%S+)')
+
+        if x > _x or (x == _x and y > _y) then
+          _br[x ..','.. y ..','.. _x ..','.. _y] = true
+        else
+          _br[_x ..','.. _y ..','.. x ..','.. y] = true
+        end
+      end
+    end
+
+    for pos, _ in pairs(_br) do
+      file:write(string.format('border: %s\n', pos))
     end
 
     file:close()
+    return
   end
 
   if key == 'm' then
@@ -133,21 +155,36 @@ function love.mousepressed(mx, my, bt)
     rx = rx - (rx - HALF_SIZE) % BOX_SIZE + HALF_SIZE
     ry = ry - (ry - HALF_SIZE) % BOX_SIZE + HALF_SIZE
 
-    first_pos = rx ..','.. ry
+    local _pos = rx ..','.. ry
+
+    if bt == 1 then
+      first_pos = _pos
+    elseif border[_pos] then
+      for pos, _ in pairs(border[_pos]) do
+        border[pos][_pos] = nil
+        if not next(border[pos]) then border[pos] = nil end
+      end
+
+      border[_pos] = nil
+    end
   end
 end
 
 function love.mousereleased(mx, my, bt)
-  if mode == 'border' then
+  if mode == 'border' and bt == 1 then
     local rx = mx - math.floor(camera.x)
     local ry = my - math.floor(camera.y)
     rx = rx - (rx - HALF_SIZE) % BOX_SIZE + HALF_SIZE
     ry = ry - (ry - HALF_SIZE) % BOX_SIZE + HALF_SIZE
 
-    local x, y = first_pos:match('(%S+),(%S+)')
-    x, y = tonumber(x), tonumber(y)
+    local _pos = rx ..','.. ry
+
+    if not border[first_pos] then border[first_pos] = {} end
+    if not border[_pos] then border[_pos] = {} end
+
+    border[first_pos][_pos] = true
+    border[_pos][first_pos] = true
 
     first_pos = nil
-    table.insert(border, {x, y, rx, ry})
   end
 end
